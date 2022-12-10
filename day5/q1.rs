@@ -1,16 +1,17 @@
-use std::io::{BufReader, prelude::*, Result};
+use std::io::{BufReader, prelude::*};
 use std::fs::File;
 
 
+
 // guess i'm doing generator -> String -> generator here
-fn main() -> Result<()> {
+fn main() {
     let f = File::open("input").unwrap();
     let mut reader = BufReader::new(f).lines();
 
     // the pallet contains all the boxes in a 2d array
     let mut pallet: Vec<Vec<char>> = Vec::new();
 
-    // parse the stacks
+    // build the pallet from the first couple of lines
     while let Some(Ok(line)) = reader.next() {
         if line == "".to_string() {
             break;
@@ -18,8 +19,7 @@ fn main() -> Result<()> {
         println!("{line}");
         let mut column = 0;
         let mut iter = line.chars();
-        // what this really needs is slice.chunks() which i learned about
-        // after coding this
+        // what this really needs is slice.chunks() which i learned about after coding this
         // array_chunks is also in the nightly rn
         while let Some(chr) = iter.next() {
             if column >= pallet.len() {
@@ -34,23 +34,34 @@ fn main() -> Result<()> {
             column += 1;
         }
     }
-    // for column in pallet {
-    //     println!("{:?}", column)
-    // }
 
-    while let Some(Ok(line)) = reader.next() {
-        let mut instructions = line.chars();
-        // finally getting lazy instantiation
-        let quantity: u32;
-        let q1 = instructions.nth(5).unwrap().to_digit(10).unwrap();
-        let q2 = instructions.nth(0).unwrap();
-        if q2 != ' ' {
-            quantity = q1 * 10 + (q2.to_digit(10).unwrap());
-            instructions.next();
-        } else {
-            quantity = q1;
-        }
-        println!("{q1}, {q2}, {quantity}");
+    println!("initial pallet:");
+    for idx in 0..pallet.len() {
+        pallet[idx].reverse();
+        println!("{:?}", pallet[idx]);
     }
-    Ok(())
+
+    // now process move instructions
+    while let Some(Ok(line)) = reader.next() {
+        let mut instructions = line.split(" ");
+        let mut stack = Vec::<char>::new();
+        let quantity = usize::from_str_radix(instructions.nth(1).unwrap(), 10).unwrap();
+        let source = usize::from_str_radix(instructions.nth(1).unwrap(), 10).unwrap() - 1;
+        let dest = usize::from_str_radix(instructions.nth(1).unwrap(), 10).unwrap() - 1;
+
+        println!("{line}");
+        for _ in 0..quantity {
+            stack.push(pallet[source].pop().unwrap());
+            pallet[dest].push(stack.pop().unwrap());
+        }
+
+        for column in &pallet {
+            println!("{:?}", column);
+        }
+    }
+    let mut res = String::new();
+    for column in pallet.as_slice() {
+        res.push(*column.last().unwrap());
+    }
+    println!("\n\n{res}");
 }
