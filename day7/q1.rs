@@ -17,12 +17,17 @@ impl Dir {
 }
 
 
+// interacting with hashmaps for this problem was the biggest rust headache i've had so far
+// i would say this is the first time i've had to rethink an algorithm because
+// of the constraints of the borrow checker.
+// so this is just all over the place. in addition to misreading the problem at first,
+// i reconstructed it twice with some hacky string parsing.
 fn main() {
     let f = File::open("input").unwrap();
     let mut reader = BufReader::new(f).lines();
 
-    let mut size = 0u32;
     let mut totals = 0u32;
+    // if i was more comfortable with rust i think i would opt to use a trie here
     let mut dirs = HashMap::<String, Dir>::new();
 
     // current directory and working directory
@@ -39,35 +44,42 @@ fn main() {
                         let dir = split.next().unwrap();
                         if dir == ".." {
                             wd = wd.rsplitn(3, "/").nth(2).unwrap().to_string();
-                            cd = dirs.get_mut(&wd).unwrap();
+                            wd.push_str("/");
+                            cd = dirs.get_mut(&wd).unwrap().clone();
                         } else {
                             wd.push_str(dir);
                             wd.push_str("/");
                             if dirs.contains_key(&wd) {
-                                cd = dirs.get_mut(&wd).unwrap();
+                                cd = dirs.get_mut(&wd).unwrap().clone();
                             } else {
                                 cd = Dir::new();
                             }
-                            dirs.insert(wd.clone(), cd.to_owned());
+                            dirs.insert(wd.clone(), cd);
                         }
-                        // println!("{:?}", wd);
-                        if size >= 100000 {
-                            totals += size;
-                        }
-                        size = 0;
                     }
                 }
                 "dir" => {
                     let kid = split.next().unwrap();
                     let mut parent = wd.clone();
                     parent.push_str(kid);
-                    cd.children.push(parent.to_owned());
+                    dirs.get_mut(&wd).unwrap().children.push(parent.to_owned());
                 }
                 _ => {
-                    cd.size += u32::from_str_radix(head, 10).unwrap();
-                    // println!("{size}");
+                    dirs.get_mut(&wd).unwrap().size += u32::from_str_radix(head, 10).unwrap();
                 }
             }
         }
-    println!("{totals}");
+
+        for (k,v) in dirs.iter() {
+            println!("{}: {}, {:?}", k, v.size, v.children);
+        }
+
+        fn sum_children() -> u32 {
+            let mut kid_weight = 0u32;
+            for child in Self.children {
+                kid_weight += child.sum_children();
+            }
+            Self.size += kid_weight;
+            return Self.size;
+        }
     }
