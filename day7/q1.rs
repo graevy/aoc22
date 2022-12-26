@@ -2,15 +2,11 @@ use std::io::{BufReader, prelude::*};
 use std::fs::File;
 
 
-// ATTEMPT 8
-// so this is interesting. i can just revisit #7 with a HashMap of String:Dirs
-// however. after the map is built, i then have to mutate the Dirs recursively to get their size linearly
-// i have discovered that rust DOES NOT LIKE me mutating contents of hashmaps
-// i must first get a mutable reference to the hashmap, and then another mutable reference to access its element
-// since i can't have two simultaneous mutable references i don't have a solution here
-// i feel like i'm misunderstanding the problem, because this sounds like something i should be able to do
-
+// ATTEMPT 9
+// the problem is called the interior mutability pattern. i spent a bit reading about it
+// wrapping dirs in refcell permits interior mutability but i have to DFS one stack at a time
 use std::collections::HashMap;
+use std::cell::RefCell;
 
 struct Dir {
     size: u32,
@@ -23,10 +19,10 @@ struct Dir {
         }
     }
 
-    fn sum_children(&mut self, dir_map: &mut HashMap<String, Self>) -> u32 {
+    fn sum_children(&mut self, dir_map: &HashMap<String, RefCell<Self>>) -> u32 {
         let mut kid_size = 0u32;
         for child in self.children.iter() {
-            kid_size += dir_map.get_mut(child).unwrap().sum_children(dir_map);
+            kid_size += dir_map[child].borrow_mut().sum_children(dir_map);
         }
         self.size += kid_size;
         return self.size;
@@ -37,15 +33,17 @@ fn main() {
     let f = File::open("input").unwrap();
     let mut reader = BufReader::new(f).lines();
 
-    let mut dirs = HashMap::<String, Dir>::new();
-    dirs.insert("/".to_string(), Dir::new());
+    let mut dirs = HashMap::<String, RefCell<Dir>>::new();
+    dirs.insert("/".to_string(), RefCell::new(Dir::new()));
 
     let mut cd = "/".to_string();
+    reader.next(); // skip adding root
 
         while let Some(Ok(line)) = reader.next() {
             let mut split = line.split(' ');
             let first = split.next().unwrap();
             let second = split.next().unwrap();
+            println!("{first}, {second}: {cd}");
 
             match first {
                 "$" => {
@@ -54,23 +52,100 @@ fn main() {
                         if name != ".." {
                             cd.push_str(name);
                             cd.push_str("/");
+                            println!("cd augmented to {cd}");
                             if !dirs.contains_key(&cd) {
-                                dirs.insert(cd.clone(), Dir::new());
+                                dirs.insert(cd.clone(), RefCell::new(Dir::new()));
                             }
                         } else {
                             cd = cd.rsplitn(3, "/").nth(2).unwrap().to_string();
+                            cd.push_str("/");
+                            println!("cd reduced to {cd}");
                         }
                     }
                 }
                 "dir" => {
-                    dirs.get_mut(&cd).unwrap().children.push(cd.clone());
+                    dirs[&cd].borrow_mut().children.push(cd.clone());
                 }
                 _ => {
-                    dirs.get_mut(&cd).unwrap().size += u32::from_str_radix(second, 10).unwrap();
+                    dirs[&cd].borrow_mut().size += u32::from_str_radix(first, 10).unwrap();
                 }
             }
         }
+        let mut head = dirs.get("/").unwrap().borrow_mut();
+        println!("{:?}", head.size);
+        head.sum_children(&dirs);
+        println!("{:?}", head.size);
     }
+
+// ATTEMPT 8
+// so this is interesting. i can just revisit #7 with a HashMap of String:Dirs
+// however. after the map is built, i then have to mutate the Dirs recursively to get their size linearly
+// i have discovered that rust DOES NOT LIKE me mutating contents of hashmaps
+// i must first get a mutable reference to the hashmap, and then another mutable reference to access its element
+// since i can't have two simultaneous mutable references i don't have a solution here
+// i feel like i'm misunderstanding the problem, because this sounds like something i should be able to do
+
+// use std::collections::HashMap;
+
+// struct Dir {
+//     size: u32,
+//     children: Vec<String>,
+// } impl Dir {
+//     fn new() -> Self {
+//         Dir {
+//             size: 0u32,
+//             children: Vec::<String>::new()
+//         }
+//     }
+
+//     fn sum_children(&mut self, dir_map: &mut HashMap<String, Self>) -> u32 {
+//         let mut kid_size = 0u32;
+//         for child in self.children.iter() {
+//             kid_size += dir_map.get_mut(child).unwrap().sum_children(dir_map);
+//         }
+//         self.size += kid_size;
+//         return self.size;
+//     }
+// }
+
+// fn main() {
+//     let f = File::open("input").unwrap();
+//     let mut reader = BufReader::new(f).lines();
+
+//     let mut dirs = HashMap::<String, Dir>::new();
+//     dirs.insert("/".to_string(), Dir::new());
+
+//     let mut cd = "/".to_string();
+
+//         while let Some(Ok(line)) = reader.next() {
+//             let mut split = line.split(' ');
+//             let first = split.next().unwrap();
+//             let second = split.next().unwrap();
+
+//             match first {
+//                 "$" => {
+//                     if second == "cd" {
+//                         let name = split.next().unwrap();
+//                         if name != ".." {
+//                             cd.push_str(name);
+//                             cd.push_str("/");
+//                             if !dirs.contains_key(&cd) {
+//                                 dirs.insert(cd.clone(), Dir::new());
+//                             }
+//                         } else {
+//                             cd = cd.rsplitn(3, "/").nth(2).unwrap().to_string();
+//                         }
+//                     }
+//                 }
+//                 "dir" => {
+//                     dirs.get_mut(&cd).unwrap().children.push(cd.clone());
+//                 }
+//                 _ => {
+//                     dirs.get_mut(&cd).unwrap().size += u32::from_str_radix(second, 10).unwrap();
+//                 }
+//             }
+//         }
+//     }
 
 
 // ATTEMPT 7: Vec owns all elements. Dir structs contain indexes to the vec rather than references
