@@ -1,0 +1,60 @@
+[package]
+name = "aoc22"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[[bin]]
+name = "day1_q1"
+path = "day1/q1.rs"
+
+[[bin]]
+name = "day1_q2"
+path = "day1/q2.rs"
+
+[[bin]]
+name = "day2_q1"
+path = "day2/q1.rs"
+
+[[bin]]
+name = "day2_q2"
+path = "day2/q2.rs"
+
+[[bin]]
+name = "day3_q1"
+path = "day3/q1.rs"
+
+[[bin]]
+name = "day3_q2"
+path = "day3/q2.rs"
+
+[[bin]]
+name = "day4_q1"
+path = "day4/q1.rs"
+
+[[bin]]
+name = "day4_q2"
+path = "day4/q2.rs"
+
+[[bin]]
+name = "day5_q1"
+path = "day5/q1.rs"
+
+[[bin]]
+name = "day5_q2"
+path = "day5/q2.rs"
+
+[[bin]]
+name = "day6_q1"
+path = "day6/q1.rs"
+
+[[bin]]
+name = "day6_q2"
+path = "day6/q2.rs"
+
+[[bin]]
+name = "day7_q1"
+path = "day7/q1.rs"
