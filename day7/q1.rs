@@ -2,80 +2,237 @@ use std::io::{BufReader, prelude::*};
 use std::fs::File;
 
 
-// ATTEMPT 9
-// the problem is called the interior mutability pattern. i spent a bit reading about it
-// wrapping dirs in refcell permits interior mutability but i have to DFS one stack at a time
+/* ATTEMPT 10: Success?
+1. ditch refcell; move from recursion to iteration -> no need for recursive mutability
+i don't like this change; giving up beautiful recursion is painful. i'm going to think about this for awhile
+2. use a string:dir hashmap to store the dirs, and use the parent/child structure to traverse the DAG
+like in attempt 6.
+
+i can sum the sizes with an algorithm like this:
+0. (cd = &mut head), (let mut size;)
+
+while head has children, loop with this base case:
+1. if cd.parent == "" && cd.children.len() == 0 { break 'outer; }
+
+pop a child and enter that frame until you hit a foot:
+2. while let Some(cd) = cd.children.pop();
+
+add the size of the foot to the parent. avoid needing a mutable reference to parent
+by copying the variable and then adding it to parent after moving up
+3. size = cd.size.copy();
+
+because cd is a mutable reference to dirs, i can't grab parent while cd exists;
+two &mut dirs would have to exist at the same time, if only for a moment
+3.5. drop(cd);
+
+set cd to the parent:
+4. cd = cd.parent
+
+add size to the parent
+5. cd.size += size;
+
+6. (loop)
+
+so: we never need more than one dirs reference, and nodes don't have to reference their parents.
+
+some thoughts:
+
+1. this does assign the right size to every dir, but it consumes the DAG.
+i could get around that by marking nodes as visited instead of consuming them?
+but i don't need to preserve the DAG after answering the problem;
+TODO: if a node has no children left, its final size is known.
+
+2. dropping references might make some forms of recursion possible.
+weak pointers also address the problem
+
+3. i don't like how often i'm cloning data. it seems messy
+
+4. i spent a lot of time reading about arenas. i even implemented one; it wasn't necessary.
+the flowarena crate has a hashmap arena which would be great. but like,
+using a string as a stack to point to hashmap data works fine.
+i can see why people on the RUF call it idiomatic.
+rsplitn(3,'/').nth(2).unwrap().to_string() is hilariously ugly though.
+when i first learned python my code was full of this shit, so i'm not too worried
+
+5. this actually took me nearly 2 weeks of hour-a-day effort to solve,
+while problem 6 took me like, 30 minutes? it reminds me of my first leetcode solution
+graph structures are a terrible introduction to certain rust concepts.
+still, i only really learn how to use a tool by understanding the problem it's meant to solve.
+that being said, using strings as pointers kindof dodges rust referencing patterns
+i'll pore through some linked list implmentations to cover that
+
+*/
+
 use std::collections::HashMap;
-use std::cell::RefCell;
+
 
 struct Dir {
     size: u32,
+    parent: String,
     children: Vec<String>,
 } impl Dir {
-    fn new() -> Self {
+    fn new(parent: String) -> Self {
         Dir {
             size: 0u32,
+            parent: parent,
             children: Vec::<String>::new()
         }
     }
-
-    fn sum_children(&mut self, dir_map: &HashMap<String, RefCell<Self>>) -> u32 {
-        let mut kid_size = 0u32;
-        for child in self.children.iter() {
-            kid_size += dir_map[child].borrow_mut().sum_children(dir_map);
-        }
-        self.size += kid_size;
-        return self.size;
-    }
 }
+
 
 fn main() {
     let f = File::open("input").unwrap();
     let mut reader = BufReader::new(f).lines();
 
-    let mut dirs = HashMap::<String, RefCell<Dir>>::new();
-    dirs.insert("/".to_string(), RefCell::new(Dir::new()));
+    let mut dirs = HashMap::<String, Dir>::new();
+    dirs.insert("/".to_string(), Dir::new(String::from("")));
 
-    let mut cd = "/".to_string();
+    let mut path = "/".to_string();
+    let mut dir: String;
     reader.next(); // skip adding root
 
         while let Some(Ok(line)) = reader.next() {
             let mut split = line.split(' ');
             let first = split.next().unwrap();
             let second = split.next().unwrap();
-            println!("{first}, {second}: {cd}");
+            // println!("{first}, {second}: {path}");
 
             match first {
                 "$" => {
                     if second == "cd" {
                         let name = split.next().unwrap();
                         if name != ".." {
-                            cd.push_str(name);
-                            cd.push_str("/");
-                            println!("cd augmented to {cd}");
-                            if !dirs.contains_key(&cd) {
-                                dirs.insert(cd.clone(), RefCell::new(Dir::new()));
+                            let parent= path.clone();
+                            path.push_str(name);
+                            path.push_str("/");
+                            // println!("path augmented to {path}");
+                            if !dirs.contains_key(&path) {
+                                dirs.insert(path.clone(), Dir::new(parent));
                             }
                         } else {
-                            cd = cd.rsplitn(3, "/").nth(2).unwrap().to_string();
-                            cd.push_str("/");
-                            println!("cd reduced to {cd}");
+                            path = path.rsplitn(3, "/").nth(2).unwrap().to_string();
+                            path.push_str("/");
+                            // println!("path reduced to {path}");
                         }
                     }
                 }
                 "dir" => {
-                    dirs[&cd].borrow_mut().children.push(cd.clone());
+                    dir = path.clone();
+                    dir.push_str(second);
+                    dir.push('/');
+                    dirs.get_mut(&path).unwrap().children.push(dir);
                 }
                 _ => {
-                    dirs[&cd].borrow_mut().size += u32::from_str_radix(first, 10).unwrap();
+                    dirs.get_mut(&path).unwrap().size += u32::from_str_radix(first, 10).unwrap();
                 }
             }
         }
-        let mut head = dirs.get("/").unwrap().borrow_mut();
-        println!("{:?}", head.size);
-        head.sum_children(&dirs);
-        println!("{:?}", head.size);
-    }
+        // current directory
+        let mut cd = dirs.get_mut("/").unwrap();
+        let mut size: u32;
+        let mut parent: String;
+
+        'outer: loop {
+            while let Some(kid) = cd.children.pop() {
+                println!("{kid}");
+                cd = dirs.get_mut(&kid).unwrap();
+                }
+                // base case: root has no children
+                if cd.parent == "" && cd.children.len() == 0 {
+                    break 'outer; }
+                
+            size = cd.size.clone();
+            parent = cd.parent.clone();
+            // this wouldn't be possible without dropping cd to avoid mutable references
+            // i think if i'd thought of this earlier in the process i could've stuck with recursion
+            drop(cd);
+
+            cd = dirs.get_mut(&parent).unwrap();
+            cd.size += size;
+            println!("{parent}: {:?}", cd.size);
+
+            }
+
+        // println!("{:?}", cd.size);
+
+}
+
+// ATTEMPT 9
+// the problem is called the interior mutability pattern. i spent a bit reading about it
+// wrapping dirs in refcell permits interior mutability but i have to DFS one frame at a time
+// this works i think if i use unsafecell. but that's not why i'm here
+// use std::collections::HashMap;
+// use std::cell::RefCell;
+
+// struct Dir {
+//     size: u32,
+//     children: Vec<String>,
+// } impl Dir {
+//     fn new() -> Self {
+//         Dir {
+//             size: 0u32,
+//             children: Vec::<String>::new()
+//         }
+//     }
+
+//     fn sum_children(&mut self, dir_map: &HashMap<String, RefCell<Self>>) -> u32 {
+//         let mut kid_size = 0u32;
+//         for child in self.children.iter() {
+//             kid_size += dir_map[child].borrow_mut().sum_children(dir_map);
+//         }
+//         self.size += kid_size;
+//         return self.size;
+//     }
+// }
+
+// fn main() {
+//     let f = File::open("input").unwrap();
+//     let mut reader = BufReader::new(f).lines();
+
+//     let mut dirs = HashMap::<String, RefCell<Dir>>::new();
+//     dirs.insert("/".to_string(), RefCell::new(Dir::new()));
+
+//     let mut cd = "/".to_string();
+//     reader.next(); // skip adding root
+
+//         while let Some(Ok(line)) = reader.next() {
+//             let mut split = line.split(' ');
+//             let first = split.next().unwrap();
+//             let second = split.next().unwrap();
+//             println!("{first}, {second}: {cd}");
+
+//             match first {
+//                 "$" => {
+//                     if second == "cd" {
+//                         let name = split.next().unwrap();
+//                         if name != ".." {
+//                             cd.push_str(name);
+//                             cd.push_str("/");
+//                             println!("cd augmented to {cd}");
+//                             if !dirs.contains_key(&cd) {
+//                                 dirs.insert(cd.clone(), RefCell::new(Dir::new()));
+//                             }
+//                         } else {
+//                             cd = cd.rsplitn(3, "/").nth(2).unwrap().to_string();
+//                             cd.push_str("/");
+//                             println!("cd reduced to {cd}");
+//                         }
+//                     }
+//                 }
+//                 "dir" => {
+//                     dirs[&cd].borrow_mut().children.push(cd.clone());
+//                 }
+//                 _ => {
+//                     dirs[&cd].borrow_mut().size += u32::from_str_radix(first, 10).unwrap();
+//                 }
+//             }
+//         }
+//         let mut head = dirs.get("/").unwrap().borrow_mut();
+//         println!("{:?}", head.size);
+//         head.sum_children(&dirs);
+//         println!("{:?}", head.size);
+//     }
 
 // ATTEMPT 8
 // so this is interesting. i can just revisit #7 with a HashMap of String:Dirs
